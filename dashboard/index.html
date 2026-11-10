@@ -25,6 +25,11 @@
     li:first-child { border-top:0; }
     .tag { display:inline-block; margin-right:8px; padding:2px 8px; border-radius:7px; background:#20344b; color:#b9d9ef; font-size:.8rem; }
     .warning { color:#ffd18a; }
+    .alert-banner { display:none; margin:0 0 18px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; font-weight:600; }
+    .alert-banner.show { display:block; }
+    .alert-banner.danger { color:#ffd9dc; border-color:var(--danger); background:#3a1d2a; }
+    .alert-banner.warning { color:#ffe2ae; border-color:#a8752b; background:#352b1b; }
+    .alert-banner.ok { color:#c7fff2; border-color:var(--accent); background:#17332f; }
     code { color:#b9d9ef; overflow-wrap:anywhere; }
     @media(max-width:600px) { body { padding:18px; } }
   </style>
@@ -38,6 +43,8 @@
     </div>
     <div id="connection" class="pill">Conectando ao broker…</div>
   </header>
+
+  <div id="alertBanner" class="alert-banner" role="status" aria-live="polite"></div>
 
   <div class="grid">
     <article class="card"><h2>Luminosidade</h2><div class="value" id="light">—</div><div class="muted" id="adc">ADC: —</div></article>
@@ -66,6 +73,12 @@
   const ROOT = "smartcity/security/demo-esp32-sos-74A9";
   const $ = (id) => document.getElementById(id);
   const history = [];
+
+  function showAlert(message, kind = "warning") {
+    const banner = $("alertBanner");
+    banner.textContent = message;
+    banner.className = "alert-banner show " + kind;
+  }
 
   function displayBool(value) {
     if (value === true || value === 1 || value === "true" || value === "1" || value === "ON") return "Ativo";
@@ -117,9 +130,31 @@
       if (data.dark !== undefined) $("lowlight").textContent = displayBool(data.dark);
     }
 
-    if (topic === ROOT + "/current/emergency") $("emergency").textContent = displayBool(data && data.value !== undefined ? data.value : raw);
-    if (topic === ROOT + "/current/motion") $("motion").textContent = displayBool(data && data.value !== undefined ? data.value : raw);
-    if (topic === ROOT + "/current/low_light") $("lowlight").textContent = displayBool(data && data.value !== undefined ? data.value : raw);
+    if (topic === ROOT + "/current/emergency") {
+      const active = displayBool(data && data.value !== undefined ? data.value : raw) === "Ativo";
+      $("emergency").textContent = active ? "Ativo" : "Inativo";
+      if (active) showAlert("ALERTA SOS: estado de emergência ativo.", "danger");
+    }
+    if (topic === ROOT + "/current/motion") {
+      const active = displayBool(data && data.value !== undefined ? data.value : raw) === "Ativo";
+      $("motion").textContent = active ? "Ativo" : "Inativo";
+      if (active) showAlert("Movimento detectado pelo sensor PIR.", "warning");
+    }
+    if (topic === ROOT + "/current/low_light") {
+      const active = displayBool(data && data.value !== undefined ? data.value : raw) === "Ativo";
+      $("lowlight").textContent = active ? "Ativo" : "Inativo";
+      if (active) showAlert("ALERTA: luminosidade abaixo do limite configurado.", "warning");
+    }
+
+    if (data && data.type === "sos") {
+      showAlert("ALERTA SOS recebido — evento de emergência registrado.", "danger");
+    } else if (data && data.type === "motion_event" && data.active === true) {
+      showAlert("Movimento detectado — evento do sensor PIR recebido.", "warning");
+    } else if (data && data.type === "lighting_event" && data.active === true) {
+      showAlert("Baixa luminosidade detectada — evento do sensor LDR recebido.", "warning");
+    } else if (data && data.type === "lighting_event" && data.active === false) {
+      showAlert("Luminosidade normalizada — evento de iluminação recebido.", "ok");
+    }
 
     if (topic.includes("/events/") || topic === ROOT + "/status" || topic === ROOT + "/telemetry") {
       addEvent(topic, data, raw);
