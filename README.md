@@ -9,6 +9,7 @@ Projeto demonstrativo de segurança urbana com ESP32, sensores e comunicação M
 - [Projeto no Wokwi](https://wokwi.com/projects/480294036688727041)
 - [Dashboard web](./dashboard/)
 - [Guia de integração MQTT](./docs/INTEGRACAO_APP.md)
+- [Requisitos da entrega — Parte 6: Simulação de IoT](./docs/REQUISITOS_ENTREGA.md)
 
 ## Estrutura
 
