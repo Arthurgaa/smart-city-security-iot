@@ -25,7 +25,9 @@ smart-city-security-iot/
 
 ## Funcionalidades demonstradas
 
-- Recepção de telemetria de luminosidade.
+- Leitura de dois sensores: LDR (luminosidade) e PIR (movimento).
+- Alertas para baixa luminosidade (abaixo de 20%) e detecção de movimento.
+- Recepção de telemetria e eventos SOS, movimento e iluminação por MQTT.
 - Estado atual de emergência, movimento e baixa luminosidade.
 - Eventos de SOS, movimento e iluminação.
 - Atualização em tempo real por MQTT sobre WebSocket.
