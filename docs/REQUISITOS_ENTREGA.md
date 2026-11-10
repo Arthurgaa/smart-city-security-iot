@@ -1,67 +1,89 @@
 # Parte 6 de 6 — Simulação de IoT (2 pontos)
 
-Este documento relaciona o projeto Smart City Security aos três critérios de avaliação da etapa de IoT.
+Este documento apresenta as evidências do projeto Smart City Security para os três critérios de avaliação da etapa de IoT, com base no firmware ESP32 fornecido e na integração MQTT do repositório.
 
-## Visão geral da avaliação
+## Resultado por critério
 
-| Critério | O que a entrega precisa demonstrar | Evidência disponível no projeto | Situação |
-|---|---|---|---|
-| 01 — Simulação (1,0 pt) | Pelo menos dois sensores simulados por script, JSON ou MQTT simulado | A interface MQTT prevê dados de luminosidade (`luminosidade_pct` / `adc`) e movimento (`motion`), além dos estados `current/motion` e `current/low_light` | **Parcialmente evidenciado**: a integração está preparada para dois sinais de sensores, mas é necessário conferir o circuito e o firmware no Wokwi para comprovar os componentes simulados |
-| 02 — Uso dos dados (0,5 pt) | Os dados precisam provocar uma ação, decisão ou alerta na aplicação | O dashboard atualiza os indicadores e registra mensagens/eventos recebidos por MQTT | **Parcialmente atendido**: há atualização visual e histórico; é preciso demonstrar que o firmware publica eventos ao detectar as condições, ou implementar uma regra explícita de alerta na aplicação |
-| 03 — Explicação (0,5 pt) | Informar qual sensor é usado, o que mede e como influencia o sistema | Este documento descreve os sinais previstos na integração | **Documentado em nível funcional**; confirmar o modelo exato dos componentes no Wokwi antes da apresentação |
+| Critério | Evidência concreta no projeto | Pontuação prevista |
+|---|---|---:|
+| 01 — Simulação | Dois sensores distintos no ESP32: LDR no GPIO 34 e PIR no GPIO 27. O ESP32 lê o LDR por ADC e o PIR por entrada digital; envia telemetria e estados por MQTT. | 1,0 / 1,0 |
+| 02 — Uso dos dados | O firmware compara luminosidade com limite de 20%, detecta a borda de movimento do PIR e publica eventos MQTT. O botão SOS também gera evento e acende o LED. O dashboard mostra estados e registra eventos, com aviso visual de evento recebido. | 0,5 / 0,5 |
+| 03 — Explicação | Sensores, pinos, grandezas, regra de decisão e efeito no sistema estão descritos abaixo. | 0,5 / 0,5 |
 
-## Sensores e sinais monitorados
+**Potencial: 2,0 / 2,0 pontos**, sujeito à execução da simulação e à apresentação das evidências ao avaliador.
 
-### 1. Sensor de luminosidade (LDR ou módulo equivalente)
+## 1. Sensores simulados
 
-- **O que mede:** intensidade de luz do ambiente. A leitura analógica do sensor é convertida em um valor bruto (`adc`) e/ou em percentual (`luminosidade_pct`).
-- **Como aparece no sistema:** a telemetria MQTT pode transportar `luminosidade_pct`, `adc` e o indicador booleano `dark`. O estado também pode ser publicado em `<ROOT>/current/low_light`.
-- **Como influencia a aplicação:** quando a leitura indica pouca iluminação, a aplicação pode sinalizar condição de baixa luminosidade no painel e registrar um evento de iluminação.
-- **Atenção:** a interface e os tópicos indicam esse sinal, mas o componente físico exato (LDR, fototransistor ou outro) deve ser confirmado no circuito Wokwi.
+### Sensor LDR — luminosidade (GPIO 34)
 
-### 2. Sensor de movimento (PIR ou módulo equivalente)
+- **O que mede:** intensidade de luz do ambiente.
+- **Como é lido:** entrada analógica por `analogRead(PINO_LDR)`, com resolução de 12 bits (0 a 4095).
+- **Conversão:** o firmware converte a leitura ADC para um percentual de 0 a 100.
+- **Regra de decisão:** `LIMITE_PONTO_ESCURO = 20`; quando a luminosidade calculada fica abaixo de 20%, a condição de ponto escuro é ativada.
+- **Efeito:** publica o estado em `<ROOT>/current/low_light` e publica um evento `lighting_event` em `<ROOT>/events/lighting/...`. Quando a luminosidade volta ao normal, publica evento com `active:false`.
+- **Periodicidade:** leitura automática a cada 5 segundos.
 
-- **O que detecta:** presença de movimento no campo de detecção do sensor.
-- **Como aparece no sistema:** o indicador `motion` pode ser enviado na telemetria e o estado atual pode ser publicado em `<ROOT>/current/motion`.
-- **Como influencia a aplicação:** a detecção pode atualizar o painel e gerar um evento de movimento em `<ROOT>/events/motion/...`.
-- **Atenção:** o tipo exato do componente (por exemplo, PIR) deve ser confirmado no circuito Wokwi.
+### Sensor PIR — movimento (GPIO 27)
 
-### 3. Botão de SOS (entrada de acionamento, não contabilizada como sensor)
+- **O que detecta:** movimento no campo de detecção do sensor.
+- **Como é lido:** entrada digital; o nível HIGH indica detecção de movimento e LOW indica ausência de movimento.
+- **Tratamento:** o firmware aguarda 3 segundos de aquecimento e aplica debounce de 100 ms para evitar oscilações rápidas.
+- **Regra de decisão:** quando o sensor está armado e muda para HIGH de forma estável, o firmware considera movimento detectado.
+- **Efeito:** publica `true` em `<ROOT>/current/motion` e um evento `motion_event` em `<ROOT>/events/motion/...`. Quando retorna a LOW, publica `false` no estado atual.
 
-O projeto também prevê estado de emergência e eventos SOS. Um botão de SOS é um dispositivo de entrada acionado pelo usuário; não deve ser apresentado como um segundo sensor. Ele complementa a solução permitindo gerar manualmente um alerta de emergência.
+## 2. Entrada complementar: botão SOS e atuador LED
 
-## Fluxo de dados esperado
+O botão SOS no GPIO 12 é uma entrada manual, não um dos dois sensores exigidos. Ao ser pressionado depois da inicialização e do debounce de 50 ms, o firmware:
 
-1. Os sensores simulados fornecem leituras/estados ao ESP32.
-2. O firmware interpreta as leituras e identifica condições como movimento ou baixa luminosidade.
-3. O ESP32 publica telemetria, estados atuais e/ou eventos em tópicos MQTT.
-4. O dashboard assina `<ROOT>/#`, recebe as mensagens e atualiza os indicadores e a lista de eventos.
+1. acende o LED conectado ao GPIO 2;
+2. publica um evento `sos` em `<ROOT>/events/sos/...`;
+3. publica o estado de emergência em `<ROOT>/current/emergency`.
 
-Tópico raiz usado na demonstração:
+Ao liberar o botão, apaga o LED e publica estado de emergência `false`. Isso demonstra uma ação adicional do sistema além dos sensores ambientais.
+
+## 3. Fluxo de dados
+
+1. LDR e PIR fornecem leituras ao ESP32.
+2. O firmware aplica regras locais (limite de luminosidade, debounce e estado armado do PIR).
+3. O ESP32 publica telemetria, estados atuais e eventos no broker MQTT.
+4. O dashboard conecta ao broker por MQTT sobre WebSocket seguro (WSS), assina o tópico raiz e atualiza os indicadores, a lista de eventos e o aviso visual.
+
+Tópico raiz:
 
 ```text
 smartcity/security/demo-esp32-sos-74A9
 ```
 
-## Como demonstrar os critérios ao avaliador
+Tópicos principais:
 
-1. Abra o [projeto no Wokwi](https://wokwi.com/projects/480294036688727041) e mostre os dois componentes sensores no circuito.
-2. Execute a simulação e altere a condição de cada sensor (por exemplo, iluminar/escurecer o LDR e ativar o sensor de movimento).
-3. Mostre no dashboard a alteração dos valores/estados recebidos via MQTT.
-4. Mostre a publicação do evento correspondente no histórico ou no monitor MQTT.
-5. Explique que luminosidade representa a condição de iluminação do local e movimento indica atividade detectada; ambos ajudam a identificar situações que merecem atenção.
+| Tópico | Conteúdo |
+|---|---|
+| `<ROOT>/telemetry` | ADC, luminosidade percentual, `dark`, `motion` e diagnóstico |
+| `<ROOT>/current/low_light` | Estado atual de baixa luminosidade |
+| `<ROOT>/current/motion` | Estado atual de movimento |
+| `<ROOT>/current/emergency` | Estado atual do SOS |
+| `<ROOT>/events/lighting/...` | Transições da condição de iluminação |
+| `<ROOT>/events/motion/...` | Detecções de movimento |
+| `<ROOT>/events/sos/...` | Acionamentos do botão SOS |
 
-## Evidências que ainda precisam ser conferidas
+## 4. Como demonstrar ao avaliador
 
-O repositório contém a camada de integração e o dashboard, mas o firmware e o diagrama permanecem no Wokwi. Portanto, para afirmar que a simulação atende integralmente ao critério 01 e que os alertas são efetivamente disparados pelo dispositivo, é necessário conferir no Wokwi:
+1. Abra o [projeto Smart City Security no Wokwi](https://wokwi.com/projects/480294036688727041).
+2. Mostre o LDR ligado ao GPIO 34 e o PIR ao GPIO 27, além do ESP32.
+3. Inicie a simulação e aguarde o aquecimento do PIR (3 segundos) e a primeira leitura do LDR.
+4. Altere a iluminação do LDR até a luminosidade ficar abaixo de 20%. Mostre no Monitor Serial o diagnóstico de ponto escuro e a publicação do evento de iluminação.
+5. Acione o PIR. Mostre a mensagem de movimento detectado e a publicação do evento correspondente.
+6. Abra o dashboard e mostre os estados atualizados, a mensagem de evento recebida e a conexão MQTT.
+7. Opcionalmente, pressione o botão SOS para mostrar o LED, o estado de emergência e o evento SOS.
 
-- quais componentes estão conectados ao ESP32;
-- se há pelo menos dois sensores distintos simulados;
-- quais limites/condições fazem o firmware publicar os eventos de movimento e iluminação;
-- se os eventos aparecem no broker durante a demonstração.
+## 5. Pontos de atenção para uma demonstração correta
 
-**Importante:** o dashboard que está neste repositório apresenta estados recebidos e registra eventos publicados. A documentação dos tópicos, por si só, não comprova que o firmware esteja efetivamente gerando esses eventos. Não apresente essa parte como comprovada antes de executar o teste.
+- A conversão do ADC para percentual depende da orientação elétrica do LDR no circuito. Para demonstrar o alerta, confirme no Monitor Serial que a leitura calculada fica abaixo de 20%; se o sentido estiver invertido em relação à luz, será necessário ajustar o mapeamento ou a ligação.
+- O PIR só é considerado após o período de aquecimento e o debounce. Não espere um evento instantâneo ao iniciar a simulação.
+- O firmware publica os eventos com retenção MQTT (`retained=true`). Assim, um dashboard que se conecta depois pode receber eventos antigos retidos. Apresente-os como eventos recebidos/registrados, não necessariamente como uma detecção que acabou de ocorrer.
+- O dashboard exibe os dados que recebe. A decisão de limiar de luminosidade e a detecção de borda do PIR são realizadas pelo firmware no ESP32.
+- O broker é público e destinado à demonstração. Não use dados pessoais, credenciais ou coordenadas reais. As coordenadas no firmware são fixas e fictícias.
 
-## Segurança e escopo
+## Conclusão
 
-O broker configurado é público e serve para fins didáticos. Não envie dados pessoais, credenciais ou localização real. Para produção, use broker privado com autenticação, TLS e ACLs por tópico.
+O firmware apresentado implementa dois sensores distintos (LDR e PIR), regras de decisão para baixa luminosidade e movimento, publicação de telemetria/estados/eventos por MQTT e integração com um dashboard. Portanto, a solução contempla os três itens da rubrica; a apresentação deve comprovar a execução no Wokwi e a chegada dos eventos ao painel.
