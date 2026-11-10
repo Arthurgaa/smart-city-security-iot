@@ -20,7 +20,8 @@ smart-city-security-iot/
 ├── dashboard/
 │   └── index.html
 └── docs/
-    └── INTEGRACAO_APP.md
+    ├── INTEGRACAO_APP.md
+    └── REQUISITOS_ENTREGA.md
 ```
 
 ## Funcionalidades demonstradas
