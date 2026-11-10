@@ -3,192 +3,531 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Smart City Security — Dashboard</title>
+  <title>Smart City Security | Painel IoT</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    :root { color-scheme: dark; --bg:#0b1220; --panel:#141f33; --muted:#9aabc4; --line:#263650; --text:#eef4ff; --accent:#57c7b6; --danger:#ff6b75; }
+    :root {
+      color-scheme: dark;
+      --bg: #0b1220;
+      --panel: #121c2e;
+      --line: #26364f;
+      --text: #e8eef8;
+      --muted: #91a2bc;
+      --green: #28c58a;
+      --red: #f05252;
+      --yellow: #f4c95d;
+      --blue: #68a6ff;
+      --orange: #f59e0b;
+    }
     * { box-sizing: border-box; }
-    body { margin:0; padding:28px; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; }
-    main { max-width:1100px; margin:auto; }
-    h1 { margin:0 0 6px; font-size:clamp(1.7rem,4vw,2.4rem); }
-    .sub, .muted { color:var(--muted); }
-    .top { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
-    .pill { border:1px solid var(--line); border-radius:999px; padding:6px 12px; color:var(--muted); }
-    .pill.online { color:var(--accent); border-color:var(--accent); }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; }
-    .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; }
-    .card h2 { font-size:.95rem; color:var(--muted); font-weight:600; margin:0 0 12px; }
-    .value { font-size:1.8rem; font-weight:700; }
-    section { margin-top:22px; }
-    section h2 { font-size:1.15rem; }
-    ul { list-style:none; padding:0; margin:0; }
-    li { padding:12px 0; border-top:1px solid var(--line); overflow-wrap:anywhere; }
-    li:first-child { border-top:0; }
-    .tag { display:inline-block; margin-right:8px; padding:2px 8px; border-radius:7px; background:#20344b; color:#b9d9ef; font-size:.8rem; }
-    .warning { color:#ffd18a; }
-    .alert-banner { display:none; margin:0 0 18px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; font-weight:600; }
-    .alert-banner.show { display:block; }
-    .alert-banner.danger { color:#ffd9dc; border-color:var(--danger); background:#3a1d2a; }
-    .alert-banner.warning { color:#ffe2ae; border-color:#a8752b; background:#352b1b; }
-    .alert-banner.ok { color:#c7fff2; border-color:var(--accent); background:#17332f; }
-    code { color:#b9d9ef; overflow-wrap:anywhere; }
-    @media(max-width:600px) { body { padding:18px; } }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 15% 0%, #152744 0, var(--bg) 42%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    .wrap { width: min(1280px, calc(100% - 32px)); margin: 28px auto 48px; }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 24px; }
+    .eyebrow { color: var(--green); letter-spacing: .15em; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    h1 { margin: 7px 0 5px; font-size: clamp(25px, 4vw, 36px); letter-spacing: -.04em; }
+    .subtitle { color: var(--muted); margin: 0; font-size: 14px; }
+    .connection { display: inline-flex; align-items: center; gap: 9px; padding: 10px 13px; border: 1px solid var(--line); border-radius: 999px; background: #101a2a; color: var(--muted); font-size: 13px; white-space: nowrap; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 4px #f4c95d1a; }
+    .connection.online .dot { background: var(--green); box-shadow: 0 0 0 4px #28c58a1a; }
+    .connection.offline .dot { background: var(--red); box-shadow: 0 0 0 4px #f052521a; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .card { background: linear-gradient(145deg, #152238, var(--panel)); border: 1px solid var(--line); border-radius: 17px; padding: 18px; min-width: 0; box-shadow: 0 12px 30px #00000018; }
+    .card h2 { color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-size: 11px; margin: 0 0 14px; }
+    .value { font-size: clamp(25px, 3.2vw, 36px); font-weight: 750; letter-spacing: -.04em; line-height: 1.1; }
+    .small { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.45; }
+    .state { display: inline-flex; align-items: center; border-radius: 999px; padding: 7px 10px; background: #27364c; color: var(--muted); font-weight: 750; font-size: 11px; letter-spacing: .04em; }
+    .state.ok { background: #123b32; color: #61e0b1; }
+    .state.bad { background: #451f2a; color: #ff8585; }
+    .state.warn { background: #45381d; color: #f4d47c; }
+    .state.info { background: #1e3456; color: #9bc2ff; }
+    .emergency-card { position: relative; overflow: hidden; }
+    .emergency-card.active { border-color: #a83b4c; box-shadow: 0 0 0 1px #a83b4c50, 0 12px 35px #7e1e3025; }
+    .emergency-card.active:after { content: ""; position: absolute; width: 130px; height: 130px; border-radius: 50%; background: #f0525213; right: -42px; top: -52px; }
+    .emergency-card.active .value { color: #ff7777; }
+    .gauge-row { display: flex; align-items: center; gap: 18px; }
+    .gauge { width: 88px; height: 88px; flex: 0 0 88px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--green) 0deg, #26364f 0deg); position: relative; }
+    .gauge:before { content: ""; position: absolute; inset: 8px; background: var(--panel); border-radius: 50%; }
+    .gauge span { position: relative; font-size: 18px; font-weight: 800; }
+    .wide { grid-column: span 2; }
+    .chart-wrap { height: 250px; position: relative; }
+    .section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .section-head h2 { margin: 0; }
+    .pill { border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; padding: 6px 9px; white-space: nowrap; }
+    .history { grid-column: span 4; }
+    .table-wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; min-width: 650px; font-size: 12px; }
+    th { color: var(--muted); text-align: left; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; }
+    th, td { padding: 11px 10px; border-bottom: 1px solid #26364f99; }
+    tr:last-child td { border-bottom: 0; }
+    .empty { text-align: center; color: var(--muted); padding: 25px 10px; }
+    .footer { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; margin-top: 15px; flex-wrap: wrap; }
+    .warning { border: 1px solid #6b5522; color: #e8d18e; background: #2b2415; padding: 11px 13px; border-radius: 12px; font-size: 12px; line-height: 1.5; margin-top: 16px; }
+    .info-note { border: 1px solid #29486d; color: #b8d4f7; background: #13243a; padding: 11px 13px; border-radius: 12px; font-size: 12px; line-height: 1.5; margin-top: 14px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    #cityMap { height: 330px; width: 100%; border-radius: 12px; overflow: hidden; background: #18263a; }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #142136; color: #e8eef8; }
+    .leaflet-popup-content { line-height: 1.5; }
+    .map-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; color: var(--muted); font-size: 11px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    @media (max-width: 980px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wide { grid-column: span 2; } .history { grid-column: span 2; } }
+    @media (max-width: 600px) { .wrap { width: min(100% - 22px, 1280px); margin-top: 18px; } header { flex-direction: column; } .grid { grid-template-columns: 1fr; } .wide, .history { grid-column: span 1; } .chart-wrap { height: 220px; } #cityMap { height: 270px; } }
   </style>
 </head>
 <body>
-<main>
-  <header class="top">
-    <div>
-      <h1>Smart City Security</h1>
-      <div class="sub">Monitoramento demonstrativo via MQTT</div>
+  <main class="wrap">
+    <header>
+      <div>
+        <div class="eyebrow">Central de monitoramento · IoT</div>
+        <h1>Smart City Security</h1>
+        <p class="subtitle">SOS · iluminação urbana · detecção de movimento · mapa de demonstração</p>
+      </div>
+      <div id="connection" class="connection"><span class="dot"></span><span id="connectionText">Conectando ao MQTT...</span></div>
+    </header>
+
+    <section class="grid">
+      <article id="emergencyCard" class="card emergency-card">
+        <h2>Estado de emergência</h2>
+        <div id="emergencyValue" class="value">NORMAL</div>
+        <div id="emergencyBadge" class="state ok">SEM ALERTAS ATIVOS</div>
+        <div id="lastSos" class="small">Nenhum acionamento recebido.</div>
+      </article>
+
+      <article class="card">
+        <h2>Dispositivo ESP32</h2>
+        <div id="deviceStatus" class="value">--</div>
+        <div id="deviceBadge" class="state warn">AGUARDANDO</div>
+        <div class="small">ID: <span id="deviceId" class="mono">ESP32_SOS_001</span></div>
+      </article>
+
+      <article class="card">
+        <h2>Luminosidade</h2>
+        <div class="gauge-row">
+          <div id="gauge" class="gauge"><span id="lightValue">--%</span></div>
+          <div>
+            <div id="lightDiagnosis" class="value" style="font-size:19px">Aguardando</div>
+            <div id="darkStatus" class="small">Sem telemetria recebida.</div>
+          </div>
+        </div>
+      </article>
+
+      <article id="lowLightCard" class="card">
+        <h2>Alerta de iluminação</h2>
+        <div id="lowLightValue" class="value">NORMAL</div>
+        <div id="lowLightBadge" class="state ok">SEM PONTO ESCURO</div>
+        <div id="lowLightTime" class="small">Aguardando leitura do LDR.</div>
+      </article>
+
+      <article id="motionCard" class="card">
+        <h2>Sensor PIR · movimento</h2>
+        <div id="motionValue" class="value">--</div>
+        <div id="motionBadge" class="state warn">AGUARDANDO PIR</div>
+        <div id="motionTime" class="small">Aguardando evento do sensor.</div>
+      </article>
+
+      <article class="card">
+        <h2>Leitura analógica</h2>
+        <div id="adcValue" class="value">----</div>
+        <div class="small">ADC · escala de 0 a 4095</div>
+        <div id="lastSeen" class="small">Última leitura: --</div>
+      </article>
+
+      <article class="card">
+        <h2>Alertas SOS registrados</h2>
+        <div class="value" id="sosCount">0</div>
+        <div class="small">Eventos SOS guardados neste navegador.</div>
+        <div class="small">Último SOS: <span id="lastSosTime">--</span></div>
+      </article>
+
+      <article class="card">
+        <h2>Eventos ambientais</h2>
+        <div class="value" id="environmentCount">0</div>
+        <div class="small">Eventos de baixa luz e movimento recebidos.</div>
+      </article>
+
+      <article class="card wide">
+        <div class="section-head">
+          <h2>Histórico de luminosidade</h2>
+          <span class="pill">Últimas 30 leituras</span>
+        </div>
+        <div class="chart-wrap"><canvas id="lightChart"></canvas></div>
+      </article>
+
+      <article class="card wide">
+        <div class="section-head">
+          <h2>Mapa urbano · pontos monitorados</h2>
+          <span class="pill">Pino demonstrativo</span>
+        </div>
+        <div id="cityMap" aria-label="Mapa do ponto de monitoramento"></div>
+        <div class="map-legend">
+          <span class="legend-item"><i class="legend-dot" style="background:#28c58a"></i>Normal</span>
+          <span class="legend-item"><i class="legend-dot" style="background:#f59e0b"></i>Baixa iluminação</span>
+          <span class="legend-item"><i class="legend-dot" style="background:#68a6ff"></i>Movimento detectado</span>
+          <span class="legend-item"><i class="legend-dot" style="background:#f05252"></i>SOS ativo</span>
+        </div>
+        <div id="mapInfo" class="small">Localização ilustrativa fixa para demonstração; não representa GPS real.</div>
+      </article>
+
+      <article class="card history">
+        <div class="section-head">
+          <h2>Histórico unificado de eventos</h2>
+          <span class="pill">Máximo de 60 registros locais</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Horário recebido</th><th>Evento</th><th>Estado</th><th>Dispositivo</th><th>Identificador</th></tr></thead>
+            <tbody id="eventHistoryBody"><tr><td colspan="5" class="empty">Aguardando eventos SOS, iluminação ou movimento...</td></tr></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <div class="info-note">
+      <strong>Como interpretar:</strong> o LDR mede luz; o PIR detecta variação de movimento/atividade na área monitorada; o botão dispara o evento SOS. Movimento não identifica pessoas suspeitas nem prova que um local é perigoso. Os dados devem ser combinados com outras fontes verificadas.
     </div>
-    <div id="connection" class="pill">Conectando ao broker…</div>
-  </header>
+    <div class="warning">
+      <strong>Ambiente de demonstração:</strong> este painel usa um broker MQTT público. As mensagens podem ser vistas por terceiros. Não envie dados pessoais, senhas ou localização real. As coordenadas do mapa são fixas e ilustrativas, não vêm de GPS. O histórico é salvo somente neste navegador. Para uso real, será necessário broker privado autenticado, TLS, controle de acesso e armazenamento seguro.
+    </div>
+    <div class="footer">
+      <span>Canal MQTT: <span class="mono" id="topicLabel"></span></span>
+      <span>Mapa © OpenStreetMap · MQTT sobre WebSocket seguro</span>
+    </div>
+  </main>
 
-  <div id="alertBanner" class="alert-banner" role="status" aria-live="polite"></div>
+  <script>
+    // ROOT precisa ser idêntico ao TOPIC_ROOT do sketch.ino.
+    const ROOT = 'smartcity/security/demo-esp32-sos-74A9';
+    const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+    const EVENTS_KEY = 'smartcity-security-event-history-v2';
+    const OLD_SOS_KEY = 'smartcity-security-sos-history-v1';
+    const MAX_HISTORY = 60;
+    const MAX_POINTS = 30;
+    // Coordenadas fixas usadas pelo firmware apenas para demonstracao.
+    const DEMO_LAT = -23.550520;
+    const DEMO_LON = -46.633308;
 
-  <div class="grid">
-    <article class="card"><h2>Luminosidade</h2><div class="value" id="light">—</div><div class="muted" id="adc">ADC: —</div></article>
-    <article class="card"><h2>Emergência</h2><div class="value" id="emergency">—</div></article>
-    <article class="card"><h2>Movimento</h2><div class="value" id="motion">—</div></article>
-    <article class="card"><h2>Baixa luminosidade</h2><div class="value" id="lowlight">—</div></article>
-  </div>
+    const el = (id) => document.getElementById(id);
+    let eventHistory = loadEvents();
+    let chart;
+    let emergencyActive = false;
+    let lowLightActive = false;
+    let motionActive = false;
+    let map;
+    let sensorMarker;
+    let sensorArea;
 
-  <section class="card">
-    <h2>Últimas mensagens e eventos</h2>
-    <p class="muted" id="lastUpdate">Aguardando dados…</p>
-    <ul id="events"><li class="muted">Nenhuma mensagem recebida ainda.</li></ul>
-  </section>
-
-  <section class="card">
-    <h2>Configuração</h2>
-    <p class="muted">Broker: <code>wss://broker.emqx.io:8084/mqtt</code><br>Tópico raiz: <code>smartcity/security/demo-esp32-sos-74A9</code></p>
-    <p class="warning">Broker público de demonstração: não envie dados pessoais, credenciais ou localização real.</p>
-  </section>
-</main>
-
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-<script>
-(() => {
-  const BROKER = "wss://broker.emqx.io:8084/mqtt";
-  const ROOT = "smartcity/security/demo-esp32-sos-74A9";
-  const $ = (id) => document.getElementById(id);
-  const history = [];
-
-  function showAlert(message, kind = "warning") {
-    const banner = $("alertBanner");
-    banner.textContent = message;
-    banner.className = "alert-banner show " + kind;
-  }
-
-  function displayBool(value) {
-    if (value === true || value === 1 || value === "true" || value === "1" || value === "ON") return "Ativo";
-    if (value === false || value === 0 || value === "false" || value === "0" || value === "OFF") return "Inativo";
-    return "—";
-  }
-
-  function addEvent(topic, data, raw) {
-    const item = { time: new Date().toLocaleTimeString("pt-BR"), topic, data, raw };
-    history.unshift(item);
-    if (history.length > 30) history.pop();
-    try { localStorage.setItem("smartcity-demo-history", JSON.stringify(history)); } catch (_) {}
+    el('topicLabel').textContent = ROOT + '/#';
+    initializeChart();
+    initializeMap();
     renderHistory();
-  }
+    updateMapStyle();
 
-  function renderHistory() {
-    const list = $("events");
-    list.replaceChildren();
-    if (!history.length) {
-      const li = document.createElement("li");
-      li.className = "muted";
-      li.textContent = "Nenhuma mensagem recebida ainda.";
-      list.appendChild(li);
-      return;
-    }
-    history.forEach((entry) => {
-      const li = document.createElement("li");
-      const tag = document.createElement("span");
-      tag.className = "tag";
-      tag.textContent = entry.time;
-      const topic = document.createElement("strong");
-      topic.textContent = entry.topic;
-      const detail = document.createElement("div");
-      detail.className = "muted";
-      detail.textContent = entry.data ? JSON.stringify(entry.data) : entry.raw;
-      li.append(tag, topic, detail);
-      list.appendChild(li);
-    });
-  }
+    function loadEvents() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(EVENTS_KEY) || 'null');
+        if (Array.isArray(saved)) return saved;
+      } catch (_) { /* armazenamento pode estar indisponivel */ }
 
-  function handleMessage(topic, raw) {
-    let data;
-    try { data = JSON.parse(raw); } catch (_) { data = null; }
-
-    if (topic === ROOT + "/telemetry" && data && data.type === "telemetry") {
-      if (data.luminosidade_pct !== undefined) $("light").textContent = data.luminosidade_pct + "%";
-      if (data.adc !== undefined) $("adc").textContent = "ADC: " + data.adc;
-      if (data.motion !== undefined) $("motion").textContent = displayBool(data.motion);
-      if (data.dark !== undefined) $("lowlight").textContent = displayBool(data.dark);
+      // Migra o historico SOS da primeira versao do dashboard.
+      try {
+        const old = JSON.parse(localStorage.getItem(OLD_SOS_KEY) || '[]');
+        if (Array.isArray(old)) {
+          return old.map((item, index) => ({
+            eventId: String(item.eventId || 'old-sos-' + index),
+            kind: 'SOS', status: 'ACIONADO', deviceId: item.deviceId || 'ESP32_SOS_001',
+            receivedAt: item.receivedAt || '--', detail: 'Evento migrado da versao anterior'
+          })).slice(0, MAX_HISTORY);
+        }
+      } catch (_) { /* ignora dados antigos invalidos */ }
+      return [];
     }
 
-    if (topic === ROOT + "/current/emergency") {
-      const active = displayBool(data && data.value !== undefined ? data.value : raw) === "Ativo";
-      $("emergency").textContent = active ? "Ativo" : "Inativo";
-      if (active) showAlert("ALERTA SOS: estado de emergência ativo.", "danger");
-    }
-    if (topic === ROOT + "/current/motion") {
-      const active = displayBool(data && data.value !== undefined ? data.value : raw) === "Ativo";
-      $("motion").textContent = active ? "Ativo" : "Inativo";
-      if (active) showAlert("Movimento detectado pelo sensor PIR.", "warning");
-    }
-    if (topic === ROOT + "/current/low_light") {
-      const active = displayBool(data && data.value !== undefined ? data.value : raw) === "Ativo";
-      $("lowlight").textContent = active ? "Ativo" : "Inativo";
-      if (active) showAlert("ALERTA: luminosidade abaixo do limite configurado.", "warning");
+    function saveEvents() {
+      try { localStorage.setItem(EVENTS_KEY, JSON.stringify(eventHistory.slice(0, MAX_HISTORY))); }
+      catch (err) { console.warn('Nao foi possivel salvar historico local:', err); }
     }
 
-    if (data && data.type === "sos") {
-      showAlert("ALERTA SOS recebido — evento de emergência registrado.", "danger");
-    } else if (data && data.type === "motion_event" && data.active === true) {
-      showAlert("Movimento detectado — evento do sensor PIR recebido.", "warning");
-    } else if (data && data.type === "lighting_event" && data.active === true) {
-      showAlert("Baixa luminosidade detectada — evento do sensor LDR recebido.", "warning");
-    } else if (data && data.type === "lighting_event" && data.active === false) {
-      showAlert("Luminosidade normalizada — evento de iluminação recebido.", "ok");
+    function initializeChart() {
+      const ctx = el('lightChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{
+          label: 'Luminosidade (%)', data: [], borderColor: '#28c58a',
+          backgroundColor: 'rgba(40, 197, 138, 0.12)', borderWidth: 2,
+          pointRadius: 2, pointHoverRadius: 5, fill: true, tension: 0.32
+        }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { labels: { color: '#91a2bc' } } },
+          scales: {
+            x: { ticks: { color: '#91a2bc', maxTicksLimit: 7 }, grid: { color: 'rgba(145,162,188,.10)' } },
+            y: { min: 0, max: 100, ticks: { color: '#91a2bc', callback: (v) => v + '%' }, grid: { color: 'rgba(145,162,188,.10)' } }
+          }
+        }
+      });
     }
 
-    if (topic.includes("/events/") || topic === ROOT + "/status" || topic === ROOT + "/telemetry") {
-      addEvent(topic, data, raw);
+    function initializeMap() {
+      if (typeof L === 'undefined') {
+        el('cityMap').innerHTML = '<div class="small">Biblioteca do mapa indisponivel. Verifique sua conexao com a internet.</div>';
+        return;
+      }
+      map = L.map('cityMap').setView([DEMO_LAT, DEMO_LON], 15);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+      }).addTo(map);
+
+      sensorMarker = L.circleMarker([DEMO_LAT, DEMO_LON], {
+        radius: 10, color: '#28c58a', weight: 3, fillColor: '#28c58a', fillOpacity: 0.85
+      }).addTo(map);
+      sensorArea = L.circle([DEMO_LAT, DEMO_LON], {
+        radius: 110, color: '#28c58a', weight: 1, fillColor: '#28c58a', fillOpacity: 0.12
+      }).addTo(map);
+      sensorMarker.bindPopup('<strong>ESP32_SOS_001</strong><br>Ponto de monitoramento ilustrativo.');
+      setTimeout(() => map.invalidateSize(), 150);
     }
-    $("lastUpdate").textContent = "Última atualização: " + new Date().toLocaleString("pt-BR");
-  }
 
-  if (!window.mqtt) {
-    $("connection").textContent = "Biblioteca MQTT indisponível";
-    return;
-  }
+    function updateMapStyle() {
+      if (!map || !sensorMarker || !sensorArea) return;
+      let color = '#28c58a';
+      let label = 'NORMAL';
+      if (emergencyActive) { color = '#f05252'; label = 'SOS ATIVO'; }
+      else if (lowLightActive) { color = '#f59e0b'; label = 'BAIXA ILUMINACAO'; }
+      else if (motionActive) { color = '#68a6ff'; label = 'MOVIMENTO DETECTADO'; }
 
-  const client = mqtt.connect(BROKER, { reconnectPeriod: 3000, connectTimeout: 10000, clean: true });
-  client.on("connect", () => {
-    $("connection").textContent = "Conectado";
-    $("connection").classList.add("online");
-    client.subscribe(ROOT + "/#", (error) => {
-      if (error) $("connection").textContent = "Erro na assinatura";
-    });
-  });
-  client.on("reconnect", () => {
-    $("connection").textContent = "Reconectando…";
-    $("connection").classList.remove("online");
-  });
-  client.on("offline", () => {
-    $("connection").textContent = "Offline";
-    $("connection").classList.remove("online");
-  });
-  client.on("error", () => {
-    $("connection").textContent = "Erro de conexão";
-    $("connection").classList.remove("online");
-  });
-  client.on("message", (topic, payload) => handleMessage(topic, payload.toString()));
-})();
-</script>
+      sensorMarker.setStyle({ color, fillColor: color });
+      sensorArea.setStyle({ color, fillColor: color });
+      sensorMarker.setPopupContent(
+        '<strong>ESP32_SOS_001</strong><br>Estado: ' + escapeHtml(label) +
+        '<br>LDR: ' + escapeHtml(el('lightValue').textContent) +
+        '<br>Movimento: ' + (motionActive ? 'detectado' : 'nao detectado') +
+        '<br><small>Coordenada fixa de demonstracao</small>'
+      );
+      el('mapInfo').textContent = 'Ponto demonstrativo em ' + DEMO_LAT.toFixed(6) + ', ' + DEMO_LON.toFixed(6) + ' · estado: ' + label + '. Coordenada fixa, nao GPS.';
+    }
+
+    function setConnection(state, text) {
+      const node = el('connection');
+      node.classList.remove('online', 'offline');
+      if (state) node.classList.add(state);
+      el('connectionText').textContent = text;
+    }
+
+    function setEmergency(active, eventTimeText) {
+      emergencyActive = !!active;
+      const card = el('emergencyCard');
+      card.classList.toggle('active', emergencyActive);
+      el('emergencyValue').textContent = emergencyActive ? 'ALERTA SOS' : 'NORMAL';
+      el('emergencyBadge').textContent = emergencyActive ? 'EMERGENCIA ATIVA' : 'SEM ALERTAS ATIVOS';
+      el('emergencyBadge').className = 'state ' + (emergencyActive ? 'bad' : 'ok');
+      if (eventTimeText) el('lastSos').textContent = 'Ultimo acionamento: ' + eventTimeText;
+      updateMapStyle();
+    }
+
+    function setLowLight(active, timeText) {
+      lowLightActive = !!active;
+      el('lowLightValue').textContent = lowLightActive ? 'ATENCAO' : 'NORMAL';
+      el('lowLightBadge').textContent = lowLightActive ? 'PONTO ESCURO' : 'SEM PONTO ESCURO';
+      el('lowLightBadge').className = 'state ' + (lowLightActive ? 'warn' : 'ok');
+      el('lowLightCard').style.borderColor = lowLightActive ? '#8a6423' : '';
+      if (timeText) el('lowLightTime').textContent = (lowLightActive ? 'Alerta recebido: ' : 'Normalizado: ') + timeText;
+      updateMapStyle();
+    }
+
+    function setMotion(active, timeText) {
+      motionActive = !!active;
+      el('motionValue').textContent = motionActive ? 'DETECTADO' : 'LIVRE';
+      el('motionBadge').textContent = motionActive ? 'MOVIMENTO DETECTADO' : 'SEM MOVIMENTO';
+      el('motionBadge').className = 'state ' + (motionActive ? 'info' : 'ok');
+      el('motionCard').style.borderColor = motionActive ? '#315c91' : '';
+      if (timeText) el('motionTime').textContent = 'Ultima mudanca: ' + timeText;
+      updateMapStyle();
+    }
+
+    function updateTelemetry(data) {
+      const pct = clamp(Number(data.luminosidade_pct), 0, 100);
+      const adc = clamp(Number(data.adc), 0, 4095);
+      if (!Number.isFinite(pct) || !Number.isFinite(adc)) return;
+
+      el('lightValue').textContent = Math.round(pct) + '%';
+      el('adcValue').textContent = Math.round(adc);
+      el('deviceId').textContent = data.device_id || 'ESP32_SOS_001';
+      el('lightDiagnosis').textContent = pct < 20 ? 'Ponto escuro' : (pct < 50 ? 'Baixa luz' : 'Iluminacao OK');
+      el('darkStatus').textContent = data.dark ? 'Atencao: abaixo de 20%.' : 'Luminosidade dentro do limite configurado.';
+      el('lastSeen').textContent = 'Ultima leitura: ' + new Date().toLocaleTimeString('pt-BR');
+      const gaugeColor = pct < 20 ? '#f59e0b' : '#28c58a';
+      el('gauge').style.background = \`conic-gradient(\${gaugeColor} \${pct * 3.6}deg, #26364f 0deg)\`;
+
+      if (typeof data.dark === 'boolean') setLowLight(data.dark);
+      if (typeof data.motion === 'boolean') setMotion(data.motion);
+
+      const label = new Date().toLocaleTimeString('pt-BR');
+      chart.data.labels.push(label);
+      chart.data.datasets[0].data.push(pct);
+      while (chart.data.labels.length > MAX_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+      chart.update('none');
+    }
+
+    function addEvent(data, kind, status, detail) {
+      const fallbackId = \`\${data.device_id || 'device'}-\${data.uptime_ms || Date.now()}-\${kind}\`;
+      const eventId = String(data.event_id || fallbackId);
+      if (eventHistory.some(item => item.eventId === eventId)) return;
+
+      const now = new Date();
+      eventHistory.unshift({
+        eventId,
+        kind,
+        status,
+        deviceId: data.device_id || 'ESP32_SOS_001',
+        receivedAt: now.toLocaleString('pt-BR'),
+        detail: detail || ''
+      });
+      eventHistory = eventHistory.slice(0, MAX_HISTORY);
+      saveEvents();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const sosCount = eventHistory.filter(item => item.kind === 'SOS').length;
+      const environmentCount = eventHistory.filter(item => item.kind === 'ILUMINACAO' || item.kind === 'MOVIMENTO').length;
+      el('sosCount').textContent = sosCount;
+      el('environmentCount').textContent = environmentCount;
+      const sos = eventHistory.find(item => item.kind === 'SOS');
+      el('lastSosTime').textContent = sos ? sos.receivedAt : '--';
+
+      const body = el('eventHistoryBody');
+      if (!eventHistory.length) {
+        body.innerHTML = '<tr><td colspan="5" class="empty">Aguardando eventos SOS, iluminacao ou movimento...</td></tr>';
+        return;
+      }
+      body.innerHTML = eventHistory.map(item => {
+        const cls = item.kind === 'SOS' ? 'bad' : (item.kind === 'ILUMINACAO' ? 'warn' : 'info');
+        return \`<tr>
+          <td>\${escapeHtml(item.receivedAt)}</td>
+          <td><span class="state \${cls}">\${escapeHtml(item.kind)}</span></td>
+          <td>\${escapeHtml(item.status)}</td>
+          <td>\${escapeHtml(item.deviceId)}</td>
+          <td class="mono">\${escapeHtml(item.eventId)}</td>
+        </tr>\`;
+      }).join('');
+    }
+
+    function addSosEvent(data) {
+      const nowText = new Date().toLocaleTimeString('pt-BR');
+      el('lastSos').textContent = 'Ultimo acionamento recebido: ' + nowText;
+      // O historico registra o evento; o estado atual vem de /current/emergency.
+      addEvent(data, 'SOS', 'ACIONADO', 'Botao de emergencia pressionado');
+    }
+
+    function addMotionEvent(data) {
+      // O historico registra o evento; o estado atual vem de /current/motion.
+      addEvent(data, 'MOVIMENTO', 'DETECTADO', 'PIR identificou movimento na area');
+    }
+
+    function addLightingEvent(data) {
+      const active = data.active === true;
+      // O historico registra a transicao; o estado atual vem de /current/low_light.
+      addEvent(data, 'ILUMINACAO', active ? 'PONTO ESCURO' : 'NORMALIZADO',
+        'Luminosidade: ' + (Number.isFinite(Number(data.luminosidade_pct)) ? Math.round(Number(data.luminosidade_pct)) + '%' : '--'));
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+    }
+
+    function clamp(value, min, max) {
+      if (!Number.isFinite(value)) return NaN;
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function handleMqttMessage(topic, message) {
+      const text = message.toString();
+
+      if (topic === ROOT + '/status') {
+        const online = text.trim() === 'online';
+        el('deviceStatus').textContent = online ? 'ONLINE' : 'OFFLINE';
+        el('deviceBadge').textContent = online ? 'DISPOSITIVO CONECTADO' : 'SEM CONEXAO';
+        el('deviceBadge').className = 'state ' + (online ? 'ok' : 'bad');
+        return;
+      }
+
+      if (topic === ROOT + '/current/emergency') {
+        setEmergency(text.trim() === 'true');
+        return;
+      }
+      if (topic === ROOT + '/current/motion') {
+        setMotion(text.trim() === 'true');
+        return;
+      }
+      if (topic === ROOT + '/current/low_light') {
+        setLowLight(text.trim() === 'true');
+        return;
+      }
+
+      if (topic === ROOT + '/telemetry') {
+        try {
+          const data = JSON.parse(text);
+          if (data.type === 'telemetry') updateTelemetry(data);
+        } catch (err) { console.warn('Telemetria invalida:', err); }
+        return;
+      }
+
+      if (topic.startsWith(ROOT + '/events/sos/')) {
+        try {
+          const data = JSON.parse(text);
+          if (data.type === 'sos') addSosEvent(data);
+        } catch (err) { console.warn('Evento SOS invalido:', err); }
+        return;
+      }
+      if (topic.startsWith(ROOT + '/events/motion/')) {
+        try {
+          const data = JSON.parse(text);
+          if (data.type === 'motion_event') addMotionEvent(data);
+        } catch (err) { console.warn('Evento PIR invalido:', err); }
+        return;
+      }
+      if (topic.startsWith(ROOT + '/events/lighting/')) {
+        try {
+          const data = JSON.parse(text);
+          if (data.type === 'lighting_event') addLightingEvent(data);
+        } catch (err) { console.warn('Evento de iluminacao invalido:', err); }
+      }
+    }
+
+    if (typeof mqtt === 'undefined') {
+      setConnection('offline', 'Biblioteca MQTT nao carregou');
+    } else {
+      const clientId = 'dashboard-' + Math.random().toString(16).slice(2, 12);
+      const client = mqtt.connect(BROKER_URL, {
+        clientId, clean: true, connectTimeout: 10000, reconnectPeriod: 3000, keepalive: 30
+      });
+
+      client.on('connect', () => {
+        setConnection('online', 'MQTT conectado');
+        client.subscribe(ROOT + '/#', { qos: 0 }, (err) => {
+          if (err) setConnection('offline', 'Falha ao assinar topico');
+        });
+      });
+      client.on('reconnect', () => setConnection('', 'Reconectando ao MQTT...'));
+      client.on('close', () => setConnection('offline', 'MQTT desconectado'));
+      client.on('error', (err) => {
+        console.error('Erro MQTT:', err);
+        setConnection('offline', 'Erro na conexao MQTT');
+      });
+      client.on('message', handleMqttMessage);
+    }
+  </script>
 </body>
 </html>
