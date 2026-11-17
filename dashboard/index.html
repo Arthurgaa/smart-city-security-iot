@@ -432,8 +432,14 @@
     }
 
     function addMotionEvent(data) {
-      // O historico registra o evento; o estado atual vem de /current/motion.
-      addEvent(data, 'MOVIMENTO', 'DETECTADO', 'PIR identificou movimento na area');
+      // Registra tanto a deteccao (active=true) quanto a normalizacao (active=false).
+      const active = data.active === true;
+      addEvent(
+        data,
+        'MOVIMENTO',
+        active ? 'DETECTADO' : 'NORMALIZADO',
+        active ? 'PIR identificou movimento na area' : 'PIR voltou ao estado sem movimento'
+      );
     }
 
     function addLightingEvent(data) {
