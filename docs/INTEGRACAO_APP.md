@@ -85,7 +85,7 @@ Cada acionamento deve ser tratado como um evento histórico. O `event_id` é a c
 
 ### Movimento — `<ROOT>/events/motion/{event_id}`
 
-O evento atualmente publicado pelo firmware representa a detecção de movimento:
+O firmware publica eventos nas duas transições do PIR: `active: true` quando detecta movimento (HIGH) e `active: false` quando volta ao estado normal (LOW):
 
 ```json
 {
@@ -100,7 +100,7 @@ O evento atualmente publicado pelo firmware representa a detecção de movimento
 }
 ```
 
-**Ajuste necessário no firmware para histórico completo:** publicar também um evento quando o PIR voltar para `LOW`, com `type: "motion_event"` e `active: false`. Hoje a transição para sem movimento atualiza apenas o tópico retido `current/motion`, sem evento histórico. Consulte o guia do consumidor backend.
+**Estado atual do firmware:** as transições HIGH e LOW já geram eventos `motion_event` no tópico `/events/motion/{event_id}`. O estado atual também é atualizado em `/current/motion` (retained). O backend deve persistir os dois eventos e deduplicar por `event_id`.
 
 ### Iluminação — `<ROOT>/events/lighting/{event_id}`
 
@@ -135,3 +135,12 @@ O firmware publica o evento quando a condição de baixa luminosidade muda. `act
 ## Para produção
 
 Use broker privado, autenticação por cliente, TLS, ACLs que limitem publicação/assinatura por tópico, rotação de credenciais, monitoramento e política de retenção. O broker público atual é somente para demonstração.
+
+
+## Mensagem de identificação do dispositivo
+
+Ao conectar ao MQTT, o firmware também pode publicar no tópico `<ROOT>/telemetry` uma mensagem `type: "device_info"` com dados de identificação/configuração do dispositivo. Ela não é uma amostra de sensor. O consumidor deve ignorar esse tipo para persistência de telemetria ou tratá-lo separadamente como metadado do dispositivo.
+
+## QoS e entrega
+
+As publicações de eventos do firmware usam QoS 0 e não são retidas; portanto, uma queda de conexão pode ocasionar perda de eventos. Os tópicos `current/...` são retidos para representar o último estado conhecido. Para uma demonstração, o consumidor deve reconectar e deduplicar; para produção, avaliar QoS 1 com persistência e estratégia de reprocessamento.
