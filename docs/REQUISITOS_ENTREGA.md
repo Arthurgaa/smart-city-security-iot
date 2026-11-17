@@ -28,8 +28,8 @@ Este documento apresenta as evidências do projeto Smart City Security para os t
 - **O que detecta:** movimento no campo de detecção do sensor.
 - **Como é lido:** entrada digital; HIGH indica detecção e LOW indica ausência de movimento.
 - **Tratamento:** o firmware aguarda 3 segundos de aquecimento e aplica debounce de 100 ms.
-- **Regra de decisão:** quando armado, uma mudança estável para HIGH representa movimento detectado.
-- **Efeito:** publica estado em `<ROOT>/current/motion`, evento `motion_event` em `<ROOT>/events/motion/...` e estado PIR na telemetria. Para histórico completo, o firmware também deve publicar evento quando retornar para LOW, com `active:false`.
+- **Regra de decisão:** após o aquecimento, o sensor é armado. Cada mudança estável de estado é registrada: HIGH representa movimento detectado e LOW representa retorno à condição sem movimento.
+- **Efeito:** publica o estado em `<ROOT>/current/motion`, um evento `motion_event` em `<ROOT>/events/motion/...` para cada transição (HIGH com `active:true` e LOW com `active:false`) e o estado PIR na telemetria. As duas transições já estão implementadas no firmware versionado.
 
 ## 2. Entrada complementar: botão SOS e atuador LED
 
