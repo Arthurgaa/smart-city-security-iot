@@ -59,4 +59,4 @@ Consulte [CONSUMIDOR_MQTT_BACKEND.md](./CONSUMIDOR_MQTT_BACKEND.md) para depend�
 
 ## Firmware e simulação
 
-O firmware e o circuito continuam mantidos no projeto Wokwi: [abrir simulação ESP32](https://wokwi.com/projects/480294036688727041). O repositório GitHub documenta o contrato de integração; para revisão/versionamento do código, recomenda-se manter também uma cópia sincronizada do sketch e do `diagram.json` neste repositório.
+O firmware e o circuito estão versionados neste repositório em [`firmware/smart_city_security.ino`](../firmware/smart_city_security.ino) e [`firmware/diagram.json`](../firmware/diagram.json). A simulação também está disponível no [Wokwi](https://wokwi.com/projects/480294036688727041). Ao alterar o sketch ou o circuito, mantenha os arquivos do GitHub e a simulação sincronizados.
