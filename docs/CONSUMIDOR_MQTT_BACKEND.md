@@ -61,6 +61,7 @@ Não presumam que `LIGHTING` ou `MOTION` sejam IDs. São tipos. O backend deve l
 Para cada mensagem em `/telemetry`:
 
 1. Fazer parse do JSON.
+2. Se `type == "device_info"`, tratar como metadado ou ignorar; não persistir como leitura de sensor.
 2. Exigir `type == "telemetry"`, `device_id` conhecido e `luminosidade_pct` numérico.
 3. Validar `0 <= luminosidade_pct <= 100`.
 4. Resolver o sensor LIGHTING associado ao dispositivo.
@@ -77,7 +78,7 @@ Para cada mensagem em `/events/motion/+`:
 3. Resolver o sensor MOTION do dispositivo e persistir.
 4. Deduplicar usando `event_id`.
 
-**Ajuste no firmware:** atualmente o ESP32 publica evento quando o PIR vai para HIGH, mas ao voltar para LOW publica somente o estado retido `current/motion=false`. Para gravar também a normalização, o firmware precisa publicar um segundo `motion_event` com `active:false`, em tópico `/events/motion/{event_id}`. O dashboard foi ajustado para exibir os dois estados.
+**Firmware atualizado:** o ESP32 publica `motion_event` tanto na transição para HIGH (`active:true`) quanto no retorno para LOW (`active:false`), em `/events/motion/{event_id}`. O estado atual também é atualizado em `current/motion`. Portanto, o backend já pode persistir detecção e normalização sem aguardar outra alteração no firmware.
 
 ### 3. Eventos de iluminação
 
@@ -116,3 +117,8 @@ Para cada mensagem em `/events/sos/+`:
 - [ ] Ignora `current/+` como fonte de histórico.
 - [ ] Dashboard continua funcionando sem alteração da sua conexão MQTT.
 - [ ] Não existe API Key do backend no firmware nem no dashboard.
+
+
+## Observação sobre o tipo `device_info`
+
+Na conexão MQTT, o firmware pode publicar uma mensagem de identificação no próprio tópico `/telemetry`, com `type: "device_info"`. Ela não representa uma leitura periódica. O consumidor deve filtrar por `type` antes de persistir e aceitar como telemetria somente `type == "telemetry"`.
