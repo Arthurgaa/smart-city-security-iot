@@ -1,117 +1,137 @@
-# Guia de integração — MQTT
+# Contrato de integração — MQTT
 
-Este documento descreve como uma aplicação pode consumir as mensagens do projeto Smart City Security.
+Este documento define como o dashboard e o backend consomem as mensagens publicadas pelo ESP32 Smart City Security.
 
 ## Conexão de demonstração
 
-- Transporte: MQTT sobre WebSocket seguro (WSS)
-- Broker: `wss://broker.emqx.io:8084/mqtt`
+- Transporte do dashboard: MQTT sobre WebSocket seguro (WSS)
+- URL do dashboard: `wss://broker.emqx.io:8084/mqtt`
+- Broker MQTT para clientes TCP: `broker.emqx.io:1883`
 - Tópico raiz: `smartcity/security/demo-esp32-sos-74A9`
 - Assinatura geral: `smartcity/security/demo-esp32-sos-74A9/#`
 
 O broker é público e serve somente para demonstração. Mensagens podem ser vistas por terceiros e não há garantia de privacidade, disponibilidade ou isolamento entre participantes.
 
+## Arquitetura
+
+O ESP32 publica uma única vez no broker MQTT. Dois consumidores independentes recebem as mensagens:
+
+1. Dashboard: atualiza indicadores e histórico local em tempo real.
+2. Backend Java: valida os tópicos e payloads, identifica os sensores e grava as leituras/eventos no banco.
+
+O ESP32 não chama a API REST e não recebe nem armazena a API Key do backend. O backend deve conectar-se ao broker como cliente MQTT próprio. A conexão do dashboard não persiste dados no banco.
+
 ## Tópicos
 
-| Tópico | Finalidade |
-|---|---|
-| `<ROOT>/status` | Estado/conectividade do dispositivo |
-| `<ROOT>/current/emergency` | Estado atual de emergência |
-| `<ROOT>/current/motion` | Estado atual de movimento |
-| `<ROOT>/current/low_light` | Estado atual de baixa luminosidade |
-| `<ROOT>/telemetry` | Telemetria periódica |
-| `<ROOT>/events/sos/...` | Eventos de SOS |
-| `<ROOT>/events/motion/...` | Eventos de movimento |
-| `<ROOT>/events/lighting/...` | Eventos de iluminação |
+Substitua `<ROOT>` pelo tópico raiz acima.
 
-Substitua `<ROOT>` pelo tópico raiz indicado acima. Os sufixos dos tópicos de eventos podem identificar eventos individuais.
+| Tópico | Uso | Persistir no histórico? |
+|---|---|---|
+| `<ROOT>/status` | Estado/conectividade do dispositivo (`online`/`offline`) | Opcional; normalmente estado operacional |
+| `<ROOT>/current/emergency` | Estado atual de emergência, retido | Não como novo evento histórico |
+| `<ROOT>/current/motion` | Estado atual de movimento, retido | Não como novo evento histórico |
+| `<ROOT>/current/low_light` | Estado atual de baixa luminosidade, retido | Não como novo evento histórico |
+| `<ROOT>/telemetry` | Telemetria periódica com LDR e estado PIR | Sim, leitura LIGHTING; motion pode ser usado como snapshot |
+| `<ROOT>/events/sos/+` | Acionamentos SOS | Sim, evento SOS |
+| `<ROOT>/events/motion/+` | Transições/eventos do PIR | Sim, evento MOTION |
+| `<ROOT>/events/lighting/+` | Transições da condição de iluminação | Sim, evento LIGHTING |
 
-## Payload de telemetria
+**Importante sobre retained:** os tópicos `current/...` representam o último estado conhecido e são publicados com retenção. Ao iniciar ou reconectar, o backend pode receber imediatamente uma mensagem antiga. Use-os apenas para inicializar/atualizar estado atual, nunca para criar uma nova leitura histórica a cada reconexão.
 
-Mensagens de telemetria são JSON e incluem `type: "telemetry"`.
+## Payloads publicados pelo firmware
 
-Exemplo ilustrativo:
+### Telemetria — `<ROOT>/telemetry`
+
+O firmware publica periodicamente um JSON com os campos:
 
 ```json
 {
   "type": "telemetry",
-  "luminosidade_pct": 42,
+  "device_id": "ESP32_SOS_001",
+  "uptime_ms": 15000,
   "adc": 1730,
-  "device_id": "demo-esp32",
+  "luminosidade_pct": 42,
   "dark": false,
-  "motion": false
+  "motion": false,
+  "diagnostico": "ILUMINACAO_OK",
+  "latitude": -23.550520,
+  "longitude": -46.633308
 }
 ```
 
-Campos:
+- `luminosidade_pct`: leitura LDR convertida para percentual de 0 a 100. Mapear para o sensor `LIGHTING`.
+- `motion`: estado booleano observado do PIR. Pode ser usado para atualizar o estado atual; para histórico de transições, usar os eventos do tópico `events/motion`.
+- `adc`: leitura bruta de 0 a 4095, útil para diagnóstico, não é o valor esperado pelo sensor LIGHTING.
+- `device_id`: identificador do dispositivo.
+- `uptime_ms`: tempo desde a inicialização.
+- `latitude` e `longitude`: coordenadas fixas fictícias da demonstração, não GPS real.
 
-- `type`: identifica a mensagem de telemetria.
-- `luminosidade_pct`: luminosidade em percentual.
-- `adc`: leitura bruta do conversor analógico-digital.
-- `device_id`: identificador opcional do dispositivo.
-- `dark`: indicador opcional de baixa luminosidade.
-- `motion`: indicador opcional de movimento.
+### SOS — `<ROOT>/events/sos/{event_id}`
 
-Os valores do exemplo são fictícios. Trate campos opcionais como ausentes quando não forem enviados.
-
-## Tipos de evento
-
-O dashboard reconhece os seguintes identificadores de tipo:
-
-- `sos`: evento de emergência/SOS.
-- `motion_event`: evento de movimento.
-- `lighting_event`: evento relacionado à iluminação.
-
-A estrutura detalhada de cada evento deve ser confirmada com o payload efetivamente publicado pelo firmware. Uma aplicação robusta deve validar o JSON e tolerar campos ausentes ou desconhecidos.
-
-## Exemplo de assinatura JavaScript
-
-A biblioteca MQTT.js pode ser carregada pelo CDN:
-
-```html
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+```json
+{
+  "type": "sos",
+  "event_id": "A1B2C3-S1",
+  "device_id": "ESP32_SOS_001",
+  "counter": 1,
+  "uptime_ms": 12000,
+  "latitude": -23.550520,
+  "longitude": -46.633308,
+  "emergency": true
+}
 ```
 
-Exemplo mínimo:
+Cada acionamento deve ser tratado como um evento histórico. O `event_id` é a chave de deduplicação recomendada.
 
-```javascript
-const ROOT = "smartcity/security/demo-esp32-sos-74A9";
-const client = mqtt.connect("wss://broker.emqx.io:8084/mqtt");
+### Movimento — `<ROOT>/events/motion/{event_id}`
 
-client.on("connect", () => {
-  client.subscribe(`${ROOT}/#`);
-});
+O evento atualmente publicado pelo firmware representa a detecção de movimento:
 
-client.on("message", (topic, payload) => {
-  const raw = payload.toString();
-
-  try {
-    const data = JSON.parse(raw);
-    console.log("Mensagem recebida:", topic, data);
-  } catch {
-    console.warn("Payload não é JSON válido:", topic, raw);
-  }
-});
+```json
+{
+  "type": "motion_event",
+  "event_id": "A1B2C3-M1",
+  "device_id": "ESP32_SOS_001",
+  "counter": 1,
+  "active": true,
+  "uptime_ms": 14000,
+  "latitude": -23.550520,
+  "longitude": -46.633308
+}
 ```
 
-## Recomendações para aplicações consumidoras
+**Ajuste necessário no firmware para histórico completo:** publicar também um evento quando o PIR voltar para `LOW`, com `type: "motion_event"` e `active: false`. Hoje a transição para sem movimento atualiza apenas o tópico retido `current/motion`, sem evento histórico. Consulte o guia do consumidor backend.
 
-1. Conecte-se por WSS e implemente reconexão com intervalo progressivo.
-2. Valide o tópico e o conteúdo antes de atualizar a interface.
-3. Não presuma que mensagens chegarão em uma ordem específica.
-4. Diferencie estado atual (`current/...`) de eventos históricos (`events/...`).
-5. Não trate a ausência de mensagem como prova de que um sensor está inativo.
-6. Evite armazenar ou exibir informações sensíveis.
+### Iluminação — `<ROOT>/events/lighting/{event_id}`
+
+```json
+{
+  "type": "lighting_event",
+  "event_id": "A1B2C3-L1",
+  "device_id": "ESP32_SOS_001",
+  "counter": 1,
+  "active": true,
+  "luminosidade_pct": 15,
+  "uptime_ms": 16000,
+  "latitude": -23.550520,
+  "longitude": -46.633308
+}
+```
+
+O firmware publica o evento quando a condição de baixa luminosidade muda. `active: true` indica ponto escuro; `active: false` indica normalização.
+
+## Regras para o consumidor backend
+
+1. Assinar os tópicos de eventos e telemetria do ROOT configurado.
+2. Validar o tópico, o JSON, o `type` e os campos obrigatórios antes de persistir.
+3. Deduplicar eventos usando `event_id` (com restrição única no banco, se possível).
+4. Mapear o `device_id` e o tipo de mensagem para os sensores cadastrados no backend.
+5. Mapear `luminosidade_pct` para o sensor `LIGHTING` e o estado PIR para `MOTION`, usando valores numéricos `0/1`.
+6. Tratar SOS como evento de emergência; não cadastrá-lo como leitura LIGHTING ou MOTION.
+7. Não transformar mensagens retidas de `current/...` em leituras históricas.
+8. Não confiar em coordenadas recebidas sem validar; neste projeto elas são fictícias.
+9. Implementar reconexão e logs. QoS não substitui deduplicação nem persistência.
 
 ## Para produção
 
-Use um broker privado, autenticação individual por cliente, TLS, ACLs que limitem publicação/assinatura por tópico, rotação de credenciais, monitoramento e política de retenção. Nunca coloque credenciais administrativas no código do navegador.
-
-## Observação sobre localização
-
-As coordenadas do mapa no dashboard são apenas marcadores demonstrativos fixos. Não são obtidas por GPS e não devem ser interpretadas como localização real do dispositivo.
-
-
-## Integração com o backend SOS Maria da Penha
-
-Este guia trata da conexão MQTT usada pelo dashboard. Para persistir leituras no backend do aplicativo, o ESP32 também deve enviar HTTP para `POST /sensors/{id}/readings`, com o header `X-API-Key` e o JSON `{ "value": numero }`. Consulte o [guia de integração HTTP com a API SOS Maria da Penha](./INTEGRACAO_API_SOS.md) para cadastrar sensores, configurar IDs e acrescentar o envio ao firmware.
+Use broker privado, autenticação por cliente, TLS, ACLs que limitem publicação/assinatura por tópico, rotação de credenciais, monitoramento e política de retenção. O broker público atual é somente para demonstração.
