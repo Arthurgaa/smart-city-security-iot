@@ -110,3 +110,8 @@ Use um broker privado, autenticação individual por cliente, TLS, ACLs que limi
 ## Observação sobre localização
 
 As coordenadas do mapa no dashboard são apenas marcadores demonstrativos fixos. Não são obtidas por GPS e não devem ser interpretadas como localização real do dispositivo.
+
+
+## Integração com o backend SOS Maria da Penha
+
+Este guia trata da conexão MQTT usada pelo dashboard. Para persistir leituras no backend do aplicativo, o ESP32 também deve enviar HTTP para `POST /sensors/{id}/readings`, com o header `X-API-Key` e o JSON `{ "value": numero }`. Consulte o [guia de integração HTTP com a API SOS Maria da Penha](./INTEGRACAO_API_SOS.md) para cadastrar sensores, configurar IDs e acrescentar o envio ao firmware.
