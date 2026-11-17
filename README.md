@@ -47,7 +47,7 @@ O firmware foi fornecido para ESP32 DevKit-C e utiliza a rede `Wokwi-GUEST`, o b
 
 ## Executar o dashboard
 
-Abra `dashboard/index.html` em um navegador com acesso à internet. Para evitar restrições do protocolo `file://`, prefira executar por um servidor local, como a extensão Live Server do VS Code.
+Sirva a pasta do projeto por um servidor HTTP local e abra `dashboard/index.html` pelo endereço fornecido. No VS Code, você pode usar a extensão Live Server (clique com o botão direito no arquivo e selecione **Open with Live Server**). Evite abrir o arquivo diretamente pelo protocolo `file://`, pois o navegador pode restringir o carregamento de recursos externos.
 
 O dashboard usa bibliotecas carregadas por CDN, tiles do OpenStreetMap e conecta ao broker público de demonstração configurado no arquivo. Consulte [docs/INTEGRACAO_APP.md](./docs/INTEGRACAO_APP.md) para tópicos e formatos das mensagens.
 
